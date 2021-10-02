@@ -3,13 +3,11 @@
  */
 export type Parser = (html: string) => string;
 export let parse: Parser = (_html) => {
-  console.error("Error: deno-dom: No parser registered");
-  Deno.exit(1);
+  throw new Error("Error: deno-dom: No parser registered");
 };
 
 export let parseFrag: Parser = (_html) => {
-  console.error("Error: deno-dom: No parser registered");
-  Deno.exit(1);
+  throw new Error("Error: deno-dom: No parser registered");
 };
 
 const originalParse = parse;
