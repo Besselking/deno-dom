@@ -2,6 +2,7 @@ import { CTOR_KEY } from "../constructor-lock.ts";
 import { fragmentNodesFromString } from "../deserialize.ts";
 import { Node, NodeType, Text, Comment } from "./node.ts";
 import { NodeList, nodeListMutatorSym } from "./node-list.ts";
+import { HTMLCollection, HTMLCollectionMutator, HTMLCollectionMutatorSym } from "./html-collection.ts";
 
 export class DOMTokenList extends Set<string> {
   #onChange: (className: string) => void;
@@ -11,7 +12,14 @@ export class DOMTokenList extends Set<string> {
     this.#onChange = onChange;
   }
 
-  add(token: string): this {
+  add(...tokens: string[]): this {
+    for (const token of tokens) {
+      this.#addOne(token);
+    }
+    return this;
+  }
+
+  #addOne(token: string): this {
     if (token === "" || /[\t\n\f\r ]/.test(token)) {
       throw new Error(`DOMTokenList.add: Invalid class token "${token}"`);
     }
@@ -147,6 +155,16 @@ export class Element extends Node {
     return new Element(this.nodeName, null, attributes, CTOR_KEY);
   }
 
+  get childElementCount(): number {
+    let count = 0;
+    for (const { nodeType } of this.childNodes) {
+      if (nodeType === NodeType.ELEMENT_NODE) {
+        count++;
+      }
+    }
+    return count;
+  }
+
   get className(): string {
     return this.getAttribute("class") ?? "";
   }
@@ -256,18 +274,19 @@ export class Element extends Node {
   set innerHTML(html: string) {
     // Remove all children
     for (const child of this.childNodes) {
-      child.parentNode = child.parentElement = null;
+      child._setParent(null);
     }
 
     const mutator = this._getChildNodesMutator();
     mutator.splice(0, this.childNodes.length);
 
+    // Parse HTML into new children
     if (html.length) {
       const parsed = fragmentNodesFromString(html);
       mutator.push(...parsed.childNodes[0].childNodes);
 
       for (const child of this.childNodes) {
-        child._setParent(null);
+        child._setParent(this);
         child._setOwnerDocument(this.ownerDocument);
       }
     }
@@ -279,6 +298,10 @@ export class Element extends Node {
 
   set innerText(text: string) {
     this.textContent = text;
+  }
+
+  get children(): HTMLCollection {
+    return this._getChildNodesMutator().elementsView();
   }
 
   get id(): string {
@@ -324,6 +347,28 @@ export class Element extends Node {
   hasAttributeNS(_namespace: string, name: string): boolean {
     // TODO: Use namespace
     return this.attributes.hasOwnProperty(name?.toLowerCase());
+  }
+
+  get firstElementChild(): Element | null {
+    for (const node of this.childNodes) {
+      if (node.nodeType === Node.ELEMENT_NODE) {
+        return <Element> node; 
+      }
+    }
+
+    return null;
+  }
+
+  get lastElementChild(): Element | null {
+    const { childNodes } = this;
+    for (let i = childNodes.length - 1; i >= 0; i--) {
+      const node = childNodes[i];
+      if (node.nodeType === Node.ELEMENT_NODE) {
+        return <Element> node;
+      }
+    }
+
+    return null;
   }
 
   get nextElementSibling(): Element | null {

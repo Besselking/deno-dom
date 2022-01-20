@@ -1,22 +1,7 @@
 import { CTOR_KEY } from "../constructor-lock.ts";
 import { NodeList, NodeListMutator, nodeListMutatorSym } from "./node-list.ts";
-import { HTMLCollection, HTMLCollectionMutator, HTMLCollectionMutatorSym } from "./html-collection.ts";
 import type { Element } from "./element.ts";
 import type { Document } from "./document.ts";
-
-export class EventTarget {
-  addEventListener() {
-    // TODO
-  }
-
-  removeEventListener() {
-    // TODO
-  }
-
-  dispatchEvent() {
-    // TODO
-  }
-}
 
 export enum NodeType {
   ELEMENT_NODE = 1,
@@ -33,14 +18,16 @@ export enum NodeType {
   NOTATION_NODE = 12,
 }
 
-const nodesAndTextNodes = (nodes: (Node | any)[], parentNode: Node) => {
+const nodesAndTextNodes = (nodes: (Node | unknown)[], parentNode: Node) => {
   return nodes.map(n => {
-    let node = n;
+    const node: Node = n instanceof Node
+      ? n
+      : new Text("" + n);
 
-    if (!(n instanceof Node)) {
-      node = new Text("" + n);
-    }
+    // Remove from parentNode (if any)
+    node.remove();
 
+    // Set new parent
     node._setParent(parentNode, true);
     return node;
   });
@@ -316,22 +303,9 @@ export class Node extends EventTarget {
       const index = mutator.indexOf(this);
       nodes = nodesAndTextNodes(nodes, parentNode);
 
-      mutator.splice(index, 1, ...(<Node[]> nodes));
+      mutator.splice(index, 1, ...(nodes as Node[]));
       this._setParent(null);
     }
-  }
-
-  get children(): HTMLCollection {
-    const collection = new HTMLCollection();
-    const mutator = collection[HTMLCollectionMutatorSym]();
-
-    for (const child of this.childNodes) {
-      if (child.nodeType === NodeType.ELEMENT_NODE) {
-        mutator.push(<Element> child);
-      }
-    }
-
-    return collection;
   }
 
   get nextSibling(): Node | null {
@@ -454,6 +428,16 @@ export class Node extends EventTarget {
     // point should be unreachable code as per the
     // intended logic
     return Node.DOCUMENT_POSITION_FOLLOWING;
+  }
+
+  getRootNode(opts: { composed?: boolean } = {}): Node {
+    if (this.parentNode) {
+      return this.parentNode.getRootNode(opts);
+    }
+    if (opts.composed && (this as any).host) {
+      return (this as any).host.getRootNode(opts);
+    }
+    return this;
   }
 }
 
